@@ -303,6 +303,7 @@ class PredictArgs(CommonArgs):
 
     test_path: str  # Path to CSV file containing testing data for which predictions will be made
     preds_path: str  # Path to CSV file where predictions will be saved
+    parcel_size: int = None  # Maximum number of data points to load per training loop
 
     @property
     def ensemble_size(self) -> int:
@@ -372,8 +373,6 @@ class SklearnPredictArgs(Tap):
     radius: int = 2  # Morgan fingerprint radius
     num_bits: int = 2048  # Number of bits in morgan fingerprint
     num_tasks: int  # Number of tasks the trained model makes predictions for
-    parcel_size: int = None  # Maximum number of data points to load per training loop
-    max_data_size: int = None  # Maximum number of data points to load
 
     def __init__(self, *args, **kwargs) -> None:
         super(SklearnPredictArgs, self).__init__(*args, **kwargs)
