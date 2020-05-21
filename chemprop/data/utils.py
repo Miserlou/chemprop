@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import csv
+import itertools
 from logging import Logger
 import pickle
 from random import Random
@@ -103,6 +104,7 @@ def get_data(path: str,
              features_path: List[str] = None,
              features_generator: List[str] = None,
              max_data_size: int = None,
+             data_offset: int = None,
              logger: Logger = None) -> MoleculeDataset:
     """
     Gets smiles string and target values (and optionally compound names if provided) from a CSV file.
@@ -117,6 +119,7 @@ def get_data(path: str,
     :param features_generator: A list of features generators to use. If provided, it is used
     in place of args.features_generator.
     :param max_data_size: The maximum number of data points to load.
+    :param data_offset: Row to start reading data from
     :param logger: Logger.
     :return: A MoleculeDataset containing smiles strings and target values along
     with other info such as additional features and compound names when desired.
@@ -145,8 +148,13 @@ def get_data(path: str,
     skip_smiles = set()
 
     # Load data
+
     with open(path) as f:
-        reader = csv.DictReader(f)
+        if offset:
+            reader = csv.DictReader(itertools.islice(f, data_offset, None))
+        else:
+            reader = csv.DictReader(f)
+
         columns = reader.fieldnames
 
         # By default, the SMILES column is the first column
@@ -159,6 +167,7 @@ def get_data(path: str,
 
         all_smiles, all_targets, all_rows = [], [], []
         for row in tqdm(reader):
+
             smiles = row[smiles_column]
 
             if smiles in skip_smiles:
@@ -259,7 +268,7 @@ def split_data(data: MoleculeDataset,
             args.folds_file, args.val_fold_index, args.test_fold_index
     else:
         folds_file = val_fold_index = test_fold_index = None
-    
+
     if split_type == 'crossval':
         index_set = args.crossval_index_sets[args.seed]
         data_split = []
@@ -271,7 +280,7 @@ def split_data(data: MoleculeDataset,
             data_split.append([data[i] for i in split_indices])
         train, val, test = tuple(data_split)
         return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
-    
+
     elif split_type == 'index_predetermined':
         split_indices = args.crossval_index_sets[args.seed]
 
@@ -321,7 +330,7 @@ def split_data(data: MoleculeDataset,
             val = train_val[train_size:]
 
         return MoleculeDataset(train), MoleculeDataset(val), MoleculeDataset(test)
-    
+
     elif split_type == 'scaffold_balanced':
         return scaffold_split(data, sizes=sizes, balanced=True, seed=seed, logger=logger)
 
