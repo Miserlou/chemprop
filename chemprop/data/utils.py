@@ -150,7 +150,7 @@ def get_data(path: str,
     # Load data
 
     with open(path) as f:
-        if offset:
+        if data_offset:
             reader = csv.DictReader(itertools.islice(f, data_offset, None))
         else:
             reader = csv.DictReader(f)
