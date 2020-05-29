@@ -38,85 +38,101 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
             setattr(args, key, value)
     args: Union[PredictArgs, TrainArgs]
 
-    print('Loading data')
-    if smiles is not None:
-        full_data = get_data_from_smiles(smiles=smiles, skip_invalid_smiles=False, features_generator=args.features_generator)
+    if args.parcel_size and args.max_data_size:
+        num_iterations = math.ceil(args.max_data_size/args.parcel_size)
+        max_data_size = args.parcel_size
+        print('Using parcels: ' + str(num_iterations))
     else:
-        full_data = get_data(path=args.test_path, args=args, target_columns=[], skip_invalid_smiles=False)
+        num_iterations = 1
+        max_data_size = args.max_data_size
+        print('Not using parcels.')
+    offset = 0
 
-    print('Validating SMILES')
-    full_to_valid_indices = {}
-    valid_index = 0
-    for full_index in range(len(full_data)):
-        if full_data[full_index].mol is not None:
-            full_to_valid_indices[full_index] = valid_index
-            valid_index += 1
+    for iteration in range(num_iterations):
+        print('Loading data')
+        if smiles is not None:
+            full_data = get_data_from_smiles(smiles=smiles, skip_invalid_smiles=False, features_generator=args.features_generator)
+        else:
+            full_data = get_data(path=args.test_path, args=args, target_columns=[], skip_invalid_smiles=False)
 
-    test_data = MoleculeDataset([full_data[i] for i in sorted(full_to_valid_indices.keys())])
+        print('Validating SMILES')
+        full_to_valid_indices = {}
+        valid_index = 0
+        for full_index in range(len(full_data)):
+            if full_data[full_index].mol is not None:
+                full_to_valid_indices[full_index] = valid_index
+                valid_index += 1
 
-    # Edge case if empty list of smiles is provided
-    if len(test_data) == 0:
-        return [None] * len(full_data)
+        test_data = MoleculeDataset([full_data[i] for i in sorted(full_to_valid_indices.keys())])
 
-    print(f'Test size = {len(test_data):,}')
+        # Edge case if empty list of smiles is provided
+        if len(test_data) == 0:
+            return [None] * len(full_data)
 
-    # Normalize features
-    if args.features_scaling:
-        test_data.normalize_features(features_scaler)
+        print(f'Test size = {len(test_data):,}')
 
-    # Predict with each model individually and sum predictions
-    if args.dataset_type == 'multiclass':
-        sum_preds = np.zeros((len(test_data), num_tasks, args.multiclass_num_classes))
-    else:
-        sum_preds = np.zeros((len(test_data), num_tasks))
+        # Normalize features
+        if args.features_scaling:
+            test_data.normalize_features(features_scaler)
 
-    # Create data loader
-    test_data_loader = MoleculeDataLoader(
-        dataset=test_data,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers
-    )
+        # Predict with each model individually and sum predictions
+        if args.dataset_type == 'multiclass':
+            sum_preds = np.zeros((len(test_data), num_tasks, args.multiclass_num_classes))
+        else:
+            sum_preds = np.zeros((len(test_data), num_tasks))
 
-    print(f'Predicting with an ensemble of {len(args.checkpoint_paths)} models')
-    for checkpoint_path in tqdm(args.checkpoint_paths, total=len(args.checkpoint_paths)):
-        # Load model
-        model = load_checkpoint(checkpoint_path, device=args.device)
-        model_preds = predict(
-            model=model,
-            data_loader=test_data_loader,
-            scaler=scaler
+        # Create data loader
+        test_data_loader = MoleculeDataLoader(
+            dataset=test_data,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers
         )
-        sum_preds += np.array(model_preds)
 
-    # Ensemble predictions
-    avg_preds = sum_preds / len(args.checkpoint_paths)
-    avg_preds = avg_preds.tolist()
+        print(f'Predicting with an ensemble of {len(args.checkpoint_paths)} models')
+        for checkpoint_path in tqdm(args.checkpoint_paths, total=len(args.checkpoint_paths)):
+            # Load model
+            model = load_checkpoint(checkpoint_path, device=args.device)
+            model_preds = predict(
+                model=model,
+                data_loader=test_data_loader,
+                scaler=scaler
+            )
+            sum_preds += np.array(model_preds)
 
-    # Save predictions
-    print(f'Saving predictions to {args.preds_path}')
-    assert len(test_data) == len(avg_preds)
-    makedirs(args.preds_path, isfile=True)
+        # Ensemble predictions
+        avg_preds = sum_preds / len(args.checkpoint_paths)
+        avg_preds = avg_preds.tolist()
 
-    # Get prediction column names
-    if args.dataset_type == 'multiclass':
-        task_names = [f'{name}_class_{i}' for name in task_names for i in range(args.multiclass_num_classes)]
-    else:
-        task_names = task_names
+        # Save predictions
+        if iteration != 0:
+            name, ext = os.path.splitext(args.preds_path)
+            preds_path  = "{name}.{it}{ext}".format(name=name, it=iteration, ext=ext)
+        else:
+            preds_path = args.preds_path
 
-    # Copy predictions over to full_data
-    for full_index, datapoint in enumerate(full_data):
-        valid_index = full_to_valid_indices.get(full_index, None)
-        preds = avg_preds[valid_index] if valid_index is not None else ['Invalid SMILES'] * len(task_names)
+        print(f'Saving predictions to {preds_path}')
+        assert len(test_data) == len(avg_preds)
+        makedirs(preds_path, isfile=True)
 
-        for pred_name, pred in zip(task_names, preds):
-            datapoint.row[pred_name] = pred
+        # Get prediction column names
+        if args.dataset_type == 'multiclass':
+            task_names = [f'{name}_class_{i}' for name in task_names for i in range(args.multiclass_num_classes)]
+        else:
+            task_names = task_names
 
-    # Save
-    with open(args.preds_path, 'w') as f:
-        writer = csv.DictWriter(f, fieldnames=full_data[0].row.keys())
-        writer.writeheader()
+        # Copy predictions over to full_data
+        for full_index, datapoint in enumerate(full_data):
+            valid_index = full_to_valid_indices.get(full_index, None)
+            preds = avg_preds[valid_index] if valid_index is not None else ['Invalid SMILES'] * len(task_names)
 
-        for datapoint in full_data:
-            writer.writerow(datapoint.row)
+            for pred_name, pred in zip(task_names, preds):
+                datapoint.row[pred_name] = pred
+
+        with open(preds_path, 'w') as f:
+            writer = csv.DictWriter(f, fieldnames=data[0].row.keys())
+            writer.writeheader()
+
+            for datapoint in data:
+                writer.writerow(datapoint.row)
 
     return avg_preds
