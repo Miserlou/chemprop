@@ -58,7 +58,7 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
                 args=args,
                 target_columns=[],
                 max_data_size=max_data_size,
-                data_offset=offset
+                data_offset=offset,
                 skip_invalid_smiles=False)
 
         print('Validating SMILES')
