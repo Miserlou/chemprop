@@ -135,10 +135,10 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
                 datapoint.row[pred_name] = pred
 
         with open(preds_path, 'w') as f:
-            writer = csv.DictWriter(f, fieldnames=data[0].row.keys())
+            writer = csv.DictWriter(f, fieldnames=full_data[0].row.keys())
             writer.writeheader()
 
-            for datapoint in data:
+            for datapoint in full_data:
                 writer.writerow(datapoint.row)
 
     return avg_preds
