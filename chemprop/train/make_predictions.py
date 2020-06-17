@@ -50,7 +50,7 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
         print('Not using parcels.')
 
     if args.parcel_offset:
-        offset = args.parcel_offset
+        offset = args.parcel_offset * parcel_size
     else:
         offset = 0
 
@@ -59,6 +59,7 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
         if smiles is not None:
             full_data = get_data_from_smiles(smiles=smiles, skip_invalid_smiles=False, features_generator=args.features_generator)
         else:
+            print("Getting without SMILES")
             full_data = get_data(path=args.test_path,
                 args=args,
                 target_columns=[],
@@ -145,5 +146,7 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
 
             for datapoint in full_data:
                 writer.writerow(datapoint.row)
+
+        offset = offset + parcel_size
 
     return avg_preds
