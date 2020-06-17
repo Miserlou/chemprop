@@ -304,6 +304,7 @@ class PredictArgs(CommonArgs):
     test_path: str  # Path to CSV file containing testing data for which predictions will be made
     preds_path: str  # Path to CSV file where predictions will be saved
     parcel_size: int = None  # Maximum number of data points to load per training loop
+    parcel_offset: int = None  # Offset iteration by parcel number
 
     @property
     def ensemble_size(self) -> int:

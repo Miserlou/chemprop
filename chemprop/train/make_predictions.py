@@ -48,7 +48,11 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
         num_iterations = 1
         max_data_size = args.max_data_size
         print('Not using parcels.')
-    offset = 0
+
+    if args.parcel_offset:
+        offset = args.parcel_offset
+    else:
+        offset = 0
 
     for iteration in range(num_iterations):
         print('Loading data')
@@ -113,7 +117,7 @@ def make_predictions(args: PredictArgs, smiles: List[str] = None) -> List[Option
         # Save predictions
         if iteration != 0:
             name, ext = os.path.splitext(args.preds_path)
-            preds_path  = "{name}.{it}{ext}".format(name=name, it=iteration, ext=ext)
+            preds_path  = "{name}.{it}.csv".format(name=name, it=iteration)
         else:
             preds_path = args.preds_path
 
